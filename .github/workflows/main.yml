@@ -1,0 +1,44 @@
+name: Build
+
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-20.04
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+        repository: danielga/garrysmod_common
+        ref: master
+        path: 'garrysmod_common'
+    - name: Заинсталить всякую хуйню
+      run: |
+        wget https://github.com/premake/premake-core/releases/download/v5.0.0-beta2/premake-5.0.0-beta2-linux.tar.gz -O premake.tar.gz
+        tar -xvf premake.tar.gz
+        chmod +x premake5
+        sudo cp premake5 /usr/bin
+        sudo dpkg --add-architecture i386
+        sudo apt-get update
+        sudo apt-get -y --no-install-recommends install build-essential clang-9 cmake gdb git wget g++ g++-multilib gcc-multilib
+        gcc --version
+    - name: Generate Project
+      run: |
+        premake5 --gmcommon=garrysmod_common gmake
+    - name: Make
+      run: |
+        cd projects/linux/gmake
+        make
+        make config=release_x86
+        ls
+    - name: Upload Linux Build Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux_build_artifacts
+        path: |
+          projects/linux/gmake/**/x86/**
+          projects/linux/gmake/**/x86_64/**
