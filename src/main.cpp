@@ -29,57 +29,51 @@ namespace global
 	Detouring::Hook ProcessMessagesHook;
 	std::map<CNetChan *, TimePair> ProcessingTimes;
 
-	bool ProcessMessages_Hook(CNetChan *Channel, bf_read &Buffer)
-	{
-		// Get the original function
-		static FunctionPointers::CNetChan_ProcessMessages_t Trampoline = ProcessMessagesHook.GetTrampoline<FunctionPointers::CNetChan_ProcessMessages_t>();
-		static ConVar *net_chan_limit_msec;
+    bool ProcessMessages_Hook(CNetChan *Channel, bf_read &Buffer)
+    {
+        // Get the original function
+        static FunctionPointers::CNetChan_ProcessMessages_t Trampoline = ProcessMessagesHook.GetTrampoline<FunctionPointers::CNetChan_ProcessMessages_t>();
+        static ConVar *net_chan_limit_msec = InterfacePointers::Cvar()->FindVar("net_chan_limit_msec");
 
-		// Get the net_chan_limit_msec convar
-		if (!net_chan_limit_msec)
-			net_chan_limit_msec = InterfacePointers::Cvar()->FindVar("net_chan_limit_msec");
+        // If the convar is not set or is set to 0, call the original function
+        if (!net_chan_limit_msec || net_chan_limit_msec->GetInt() == 0)
+            return Trampoline(Channel, Buffer);
 
-		// If the convar is not set or is set to 0, call the original function
-		if (!net_chan_limit_msec || net_chan_limit_msec->GetInt() == 0)
-			return Trampoline(Channel, Buffer);
+        // Get the processing time for the client and call the original function
+        auto Start = std::chrono::system_clock::now();
+        bool Return = Trampoline(Channel, Buffer);
+        auto End = std::chrono::system_clock::now();
+        std::chrono::duration<double, std::milli> ms = End - Start;
 
-		// Get the processing time for the client and call the original function
-		std::chrono::time_point Start = std::chrono::system_clock::now();
-		bool Return = Trampoline(Channel, Buffer);
-		std::chrono::time_point End = std::chrono::system_clock::now();
-		const double MS = ((End.time_since_epoch() - Start.time_since_epoch()) / 1000.0f / 1000.0f).count();
+        // Create a new entry if the client is not in the map
+        if (ProcessingTimes.find(Channel) == ProcessingTimes.end())
+            ProcessingTimes[Channel] = std::make_pair(0.0, std::chrono::system_clock::now());
 
-		// Create a new entry if the client is not in the map
-		if (ProcessingTimes.find(Channel) == ProcessingTimes.end())
-			ProcessingTimes[Channel] = std::make_pair<double, std::chrono::duration<int64_t, std::nano>>(0, std::chrono::system_clock::time_point::duration(0));
+        // Reset the processing time if it has been more than a second since the last reset
+        TimePair &Data = ProcessingTimes[Channel];
+        if (std::chrono::duration_cast<std::chrono::seconds>(End - Data.second).count() >= 1)
+        {
+            Data.first = 0.0;
+            Data.second = End;
+        }
 
-		// Reset the processing time if it has been more than a milisecond since the last reset
-		TimePair &Data = ProcessingTimes[Channel];
+        // Add the processing time to the total
+        Data.first += ms.count();
 
-		// Check if the time has been more than a milisecond since the last reset
-		if (Data.second + std::chrono::seconds(1) < End.time_since_epoch())
-		{
-			Data.first = 0;
-			Data.second = End.time_since_epoch();
-		}
+        // Check if the client has exceeded the limit
+        if (Data.first >= net_chan_limit_msec->GetInt())
+        {
+            // Shutdown the client
+            Data.first = 0.0;
+            Data.second = End;
+            Channel->Shutdown("Exceeded net processing time.");
 
-		// Add the processing time to the total
-		Data.first += MS;
+            return false;
+        }
 
-		// Check if the client has exceeded the limit
-		if (Data.first >= net_chan_limit_msec->GetInt())
-		{
-			// Shutdown the client
-			Data.first = 0;
-			Data.second = End.time_since_epoch();
-			Channel->Shutdown("Exceeded net processing time.");
-
-			return false;
-		}
-
-		// Return the original value
-		return Return;
-	}
+        // Return the original value
+        return Return;
+    }
 
 	Detouring::Hook::Target target;
 
