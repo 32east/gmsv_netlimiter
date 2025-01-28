@@ -18,16 +18,16 @@ class CNetChan : public INetChannel
 
 namespace global
 {
-	// Create a global lua state
-	GarrysMod::Lua::ILuaInterface *lua = nullptr;
-	
-	// Create a global pointer to the original function
-	FunctionPointers::CNetChan_ProcessMessages_t ProcessMessages_original = nullptr;
+    // Create a global lua state
+    GarrysMod::Lua::ILuaInterface *lua = nullptr;
+    
+    // Create a global pointer to the original function
+    FunctionPointers::CNetChan_ProcessMessages_t ProcessMessages_original = nullptr;
 
-	// Create a pair of a uint64 and a chrono::duration
-	using TimePair = std::pair<double, std::chrono::duration<int64_t, std::nano>>;
-	Detouring::Hook ProcessMessagesHook;
-	std::map<CNetChan *, TimePair> ProcessingTimes;
+    // Create a pair of a uint64 and a chrono::duration
+    using TimePair = std::pair<double, std::chrono::time_point<std::chrono::system_clock>>;
+    Detouring::Hook ProcessMessagesHook;
+    std::map<CNetChan *, TimePair> ProcessingTimes;
 
     bool ProcessMessages_Hook(CNetChan *Channel, bf_read &Buffer)
     {
@@ -47,7 +47,7 @@ namespace global
 
         // Create a new entry if the client is not in the map
         if (ProcessingTimes.find(Channel) == ProcessingTimes.end())
-            ProcessingTimes[Channel] = std::make_pair(0.0, std::chrono::system_clock::now());
+            ProcessingTimes[Channel] = std::make_pair(0.0, End);
 
         // Reset the processing time if it has been more than a second since the last reset
         TimePair &Data = ProcessingTimes[Channel];
@@ -75,64 +75,64 @@ namespace global
         return Return;
     }
 
-	Detouring::Hook::Target target;
+    Detouring::Hook::Target target;
 
-	static void Initialize(GarrysMod::Lua::ILuaBase *LUA)
-	{
-		global::lua = reinterpret_cast<GarrysMod::Lua::ILuaInterface *>(LUA);
+    static void Initialize(GarrysMod::Lua::ILuaBase *LUA)
+    {
+        global::lua = reinterpret_cast<GarrysMod::Lua::ILuaInterface *>(LUA);
 
-		// Register the convar using the global lua state
-		global::lua->CreateConVar("net_chan_limit_msec", "0", "Netchannel processing is limited to so many milliseconds, abort connection if exceeding budget.", FCVAR_ARCHIVE | FCVAR_GAMEDLL);
+        // Register the convar using the global lua state
+        global::lua->CreateConVar("net_chan_limit_msec", "0", "Netchannel processing is limited to so many milliseconds, abort connection if exceeding budget.", FCVAR_ARCHIVE | FCVAR_GAMEDLL);
 
-		// Get a pointer to the original function
-		global::ProcessMessages_original = FunctionPointers::CNetChan_ProcessMessages();
+        // Get a pointer to the original function
+        global::ProcessMessages_original = FunctionPointers::CNetChan_ProcessMessages();
 
-		// Check if the function exists
-		if (ProcessMessages_original == nullptr)
-		{
-			LUA->ThrowError("failed to retrieve CNetChan::ProcessMessages");
-			return;
-		}
+        // Check if the function exists
+        if (ProcessMessages_original == nullptr)
+        {
+            LUA->ThrowError("failed to retrieve CNetChan::ProcessMessages");
+            return;
+        }
 
-		// Create a target for the hook
-		global::target = Detouring::Hook::Target((void *)ProcessMessages_original);
+        // Create a target for the hook
+        global::target = Detouring::Hook::Target((void *)ProcessMessages_original);
 
-		// Check if the target is valid
-		if (!global::target.IsValid())
-		{
-			LUA->ThrowError("Failed to create target");
-			return;
-		}
+        // Check if the target is valid
+        if (!global::target.IsValid())
+        {
+            LUA->ThrowError("Failed to create target");
+            return;
+        }
 
-		// Create the hook
-		if (!global::ProcessMessagesHook.Create(global::target, reinterpret_cast<void *>(&global::ProcessMessages_Hook)))
-		{
-			LUA->ThrowError("Failed to create hook");
-			return;
-		}
+        // Create the hook
+        if (!global::ProcessMessagesHook.Create(global::target, reinterpret_cast<void *>(&global::ProcessMessages_Hook)))
+        {
+            LUA->ThrowError("Failed to create hook");
+            return;
+        }
 
-		// Enable the hook
-		global::ProcessMessagesHook.Enable();
-	}
+        // Enable the hook
+        global::ProcessMessagesHook.Enable();
+    }
 
-	static void deinitialize()
-	{
-		// Disable the hook
-		global::ProcessMessagesHook.Destroy();
-	}
+    static void deinitialize()
+    {
+        // Disable the hook
+        global::ProcessMessagesHook.Destroy();
+    }
 
 }
 
 GMOD_MODULE_OPEN()
 {
-	// Initialize the global lua state
-	global::Initialize(LUA);
-	return 0;
+    // Initialize the global lua state
+    global::Initialize(LUA);
+    return 0;
 }
 
 GMOD_MODULE_CLOSE()
 {
-	// Deinitialize and destroy the hook
-	global::deinitialize();
-	return 0;
+    // Deinitialize and destroy the hook
+    global::deinitialize();
+    return 0;
 }
