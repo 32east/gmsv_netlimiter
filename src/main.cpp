@@ -11,8 +11,6 @@ public:
     virtual void Shutdown(const char* reason) = 0;
 };
 
-lua_State* luaState = NULL;
-
 namespace global
 {
     Detouring::Hook ProcessMessagesHook;
@@ -49,12 +47,9 @@ namespace global
 
     void Initialize()
     {
-        GarrysMod::Lua::ILuaBase* LUA = luaState->luabase;
-        
         auto ProcessMessages_ptr = FunctionPointers::CNetChan_ProcessMessages();
         if(!ProcessMessages_ptr)
         {
-            LUA->ThrowError("Failed to get ProcessMessages pointer");
             return;
         }
 
@@ -63,7 +58,6 @@ namespace global
             reinterpret_cast<void*>(&ProcessMessages_Hook)
         ))
         {
-            LUA->ThrowError("Failed to create detour");
             return;
         }
 
@@ -80,14 +74,12 @@ namespace global
 
 GMOD_MODULE_OPEN()
 {
-    luaState = LUA->GetState();
     global::Initialize();
     return 0;
 }
 
 GMOD_MODULE_CLOSE()
 {
-    luaState = NULL;
     global::Deinitialize();
     return 0;
 }
