@@ -35,8 +35,11 @@ namespace global
 		static FunctionPointers::CNetChan_ProcessMessages_t Trampoline = ProcessMessagesHook.GetTrampoline<FunctionPointers::CNetChan_ProcessMessages_t>();
 		static ConVar *net_chan_limit_msec;
 
-        if(!Channel || !Trampoline)
+        if(!Trampoline)
             return false;
+
+        if(!Channel)
+            return Trampoline(Channel, Buffer);
 
 		// Get the net_chan_limit_msec convar
 		if (!net_chan_limit_msec)
