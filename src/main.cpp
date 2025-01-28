@@ -33,11 +33,6 @@ namespace global
     {
         // Get the original function
         static FunctionPointers::CNetChan_ProcessMessages_t Trampoline = ProcessMessagesHook.GetTrampoline<FunctionPointers::CNetChan_ProcessMessages_t>();
-        static ConVar *net_chan_limit_msec = InterfacePointers::Cvar()->FindVar("net_chan_limit_msec");
-
-        // If the convar is not set or is set to 0, call the original function
-        if (!net_chan_limit_msec || net_chan_limit_msec->GetInt() == 0)
-            return Trampoline(Channel, Buffer);
 
         // Get the processing time for the client and call the original function
         auto Start = std::chrono::system_clock::now();
@@ -61,7 +56,7 @@ namespace global
         Data.first += ms.count();
 
         // Check if the client has exceeded the limit
-        if (Data.first >= net_chan_limit_msec->GetInt())
+        if (Data.first >= 1000)
         {
             // Shutdown the client
             Data.first = 0.0;
@@ -80,9 +75,6 @@ namespace global
     static void Initialize(GarrysMod::Lua::ILuaBase *LUA)
     {
         global::lua = reinterpret_cast<GarrysMod::Lua::ILuaInterface *>(LUA);
-
-        // Register the convar using the global lua state
-        global::lua->CreateConVar("net_chan_limit_msec", "0", "Netchannel processing is limited to so many milliseconds, abort connection if exceeding budget.", FCVAR_ARCHIVE | FCVAR_GAMEDLL);
 
         // Get a pointer to the original function
         global::ProcessMessages_original = FunctionPointers::CNetChan_ProcessMessages();
@@ -119,6 +111,7 @@ namespace global
     {
         // Disable the hook
         global::ProcessMessagesHook.Destroy();
+		ProcessingTimes.clear();
     }
 
 }
