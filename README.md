@@ -1,3 +1,5 @@
+предпоследний бинарник не крашается, ластовый не чекал
+
 ## NetLimiter for Garry's Mod servers
 
 This module is an implementation of the net_chan_limit_msec convar that is available on CSGO and TF2 servers. <br>
