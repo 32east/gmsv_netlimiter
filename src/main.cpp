@@ -103,12 +103,20 @@ namespace global
 			return;
 		}
 
-        if(!global::ProcessMessagesHook.CreateDetour(
-            reinterpret_cast<void*>(ProcessMessages_original),
-            reinterpret_cast<void*>(&global::ProcessMessages_Hook)
-        ))
+        // Create a target for the hook
+        global::target = Detouring::Hook::Target((void *)ProcessMessages_original);
+
+        // Check if the target is valid
+        if (!global::target.IsValid())
         {
-            LUA->ThrowError("Failed to create detour");
+            LUA->ThrowError("Failed to create target");
+            return;
+        }
+
+        // Create the hook
+        if (!global::ProcessMessagesHook.Create(global::target, reinterpret_cast<void *>(&global::ProcessMessages_Hook)))
+        {
+            LUA->ThrowError("Failed to create hook");
             return;
         }
 
