@@ -11,6 +11,8 @@ public:
     virtual void Shutdown(const char* reason) = 0;
 };
 
+lua_State* luaState = NULL;
+
 namespace global
 {
     Detouring::Hook ProcessMessagesHook;
@@ -45,8 +47,10 @@ namespace global
         return result;
     }
 
-    void Initialize(GarrysMod::Lua::ILuaBase* LUA)
+    void Initialize()
     {
+        GarrysMod::Lua::ILuaBase* LUA = luaState->luabase;
+        
         auto ProcessMessages_ptr = FunctionPointers::CNetChan_ProcessMessages();
         if(!ProcessMessages_ptr)
         {
@@ -76,12 +80,14 @@ namespace global
 
 GMOD_MODULE_OPEN()
 {
-    global::Initialize(LUA);
+    luaState = LUA->GetState();
+    global::Initialize();
     return 0;
 }
 
 GMOD_MODULE_CLOSE()
 {
+    luaState = NULL;
     global::Deinitialize();
     return 0;
 }
